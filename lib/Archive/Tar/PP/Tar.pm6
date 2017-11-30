@@ -18,8 +18,8 @@ class Archive::Tar::PP::Tar {
   }
 
   method push(*@files){
-    $!size = [+] @files.grep(* ~~ IO || * ~~ Str).map({
-      my $x = $_ ~~ IO ?? $_ !! $_;
+    $!size = [+] @files.grep(* ~~ any(IO|Str) ).map({
+      my $x = $_ ~~ IO ?? $_ !! $_.IO;
       warn 'Could not find file to tar: '~$x.relative, next
         unless $x ~~ :e;
       @!buffer.push((
@@ -42,7 +42,7 @@ class Archive::Tar::PP::Tar {
       $buffer.push: form-header($entry<io>);
       $buffer.push: form-data($entry<io>);
     }
-    for 0 .. 2 {
+    for 0 ..^2 {
       $buffer.push(form-header);
     }
     $!file-name.spurt($buffer, :b);
