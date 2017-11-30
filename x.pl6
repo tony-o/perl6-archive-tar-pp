@@ -4,7 +4,7 @@ use Archive::Tar::PP;
 my $a = tar('test.tar');
 
 use Archive::Tar::PP::Util;
-read-tar('test/pax.tar'.IO);
+say read-tar('test/pax.tar'.IO).perl;
 
 #$a.push('x.pl6');
 

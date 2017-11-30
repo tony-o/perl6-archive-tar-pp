@@ -210,4 +210,5 @@ sub read-tar(IO $file) is export { #expects a tar file
       $fname = Any;
     }
   }
+  @buff[0..*-2];
 }
