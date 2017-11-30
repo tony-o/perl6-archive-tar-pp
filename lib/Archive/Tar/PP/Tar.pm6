@@ -17,15 +17,18 @@ class Archive::Tar::PP::Tar {
     $file ~~ IO ?? $file.s !! $file.IO.s;
   }
 
-  method allocate-buffer(*@files){
-    $!size = [+] @files.grep(* ~~ IO).map({
+  method push(*@files){
+    $!size = [+] @files.grep(* ~~ IO || * ~~ Str).map({
+      my $x = $_ ~~ IO ?? $_ !! $_;
+      warn 'Could not find file to tar: '~$x.relative, next
+        unless $x ~~ :e;
       @!buffer.push((
-        name    => $_.relative,
+        name    => $x.relative,
         buffer  => @[$.data-size($_) + $.header-size],
         written => 0,
-        io      => $_,
+        io      => $x,
       ).Hash);
-      $.data-size($_) + $.header-size;
+      $.data-size($x) + $.header-size;
     });
   }
 
@@ -35,17 +38,14 @@ class Archive::Tar::PP::Tar {
 
   method write {
     my Buf $buffer .=new;
-    @!buffer.perl.say;
     for @!buffer.grep(!*.<written>) -> $entry {
       $buffer.push: form-header($entry<io>);
       $buffer.push: form-data($entry<io>);
     }
     for 0 .. 2 {
-      'empy'.say;
       $buffer.push(form-header);
     }
     $!file-name.spurt($buffer, :b);
-    dump-buf($buffer);
   }
 
 }

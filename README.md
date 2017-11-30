@@ -5,9 +5,9 @@ since i know this is all you care about
 ```perl6
 use Archive::Tar::PP;
 
-my $new-archive = tar('x.tar'.IO);
+my $new-archive = tar('x.tar');
 
-$x.allocate-buffer('some file'.IO); #adds file data to buffer;
+$x.push('some file'); #adds file data to buffer;
 
 $x.write;
 ```
