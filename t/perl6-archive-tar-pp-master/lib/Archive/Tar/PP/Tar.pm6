@@ -1,18 +1,24 @@
-use Archive::Tar::PP::Util;
+use Archive::Tar::PP::Util;# qw<$record-size>;
  
 class Archive::Tar::PP::Tar {
+  has Int  $!size = $record-size * 2;
   has @!buffer;
   has IO $!file-name;
-  has $!state;
 
-  submethod BUILD (IO :$!file-name, :@!buffer) {
+  submethod BUILD (IO :$!file-name) {
     die 'Provide a file name for tar.'
       unless $!file-name;
-    $!state = @!buffer.elems ?? 'tar' !! 'extracted';
+  }
+
+  method header-size {
+    $record-size;
+  }
+  method data-size($file where * ~~ (IO|Str)){
+    $file ~~ IO ?? $file.s !! $file.IO.s;
   }
 
   method push(*@files){
-    @files.grep(* ~~ any(IO|Str) ).map({
+    $!size = [+] @files.grep(* ~~ any(IO|Str) ).map({
       my $x = $_ ~~ IO ?? $_ !! $_.IO;
       warn 'Could not find file to tar: '~$x.relative, next
         unless $x ~~ :e;
@@ -21,17 +27,15 @@ class Archive::Tar::PP::Tar {
         written => 0,
         io      => $x,
       ).Hash);
+      $.data-size($x) + $.header-size;
     });
   }
 
-  method ls {
-    @!buffer.map({ $_<name> });
+  method extend-file {
+    # TODO
   }
 
-  method write($fn?, Bool :$force = False) {
-    my $f = !$fn.defined ?? $!file-name !! $fn ~~ IO ?? $fn !! $fn.IO;
-    die "File exists {$f.relative}, please use :force to overwrite"
-      if (!$force && $f ~~ :e && $f ne $!file-name.relative);
+  method write {
     my Buf $buffer .=new;
     for @!buffer.grep(!*.<written>) -> $entry {
       $buffer.push: form-header($entry<io>);
@@ -41,9 +45,6 @@ class Archive::Tar::PP::Tar {
       $buffer.push(form-header);
     }
     $!file-name.spurt($buffer, :b);
-    $!state = 'tar';
   }
-
-  method state { $!state; }
 
 }

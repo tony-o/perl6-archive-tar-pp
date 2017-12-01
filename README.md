@@ -2,19 +2,28 @@
 
 since i know this is all you care about
 
+## new tar
 ```perl6
 use Archive::Tar::PP;
 
-my $new-archive = tar('x.tar');
+my $new-archive = new-tar('x.tar');
 
-$x.push('some file'); #adds file data to buffer;
+$new-archive.push('some file'); #adds file data to buffer;
 
-$x.write;
+$new-archive.write; #now you have some tarball
+```
+
+## crusty tar
+```perl6
+use Archive::Tar::PP;
+
+my $crusty = read-tar('x.tar');
+
+$crusty.ls; #returns files
 ```
 
 # limitations
 
-* handles a path and directory paxheaders (not extended)
 * doesn't keep user or group names
-* cannot read tars _yet_
 * stores the buffers in memory so, beware
+* rewrites entire tar file every time you write, so use sparingly

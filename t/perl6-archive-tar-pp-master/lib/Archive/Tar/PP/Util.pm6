@@ -15,36 +15,36 @@ sub pax-pack($name, $value) {
 
 my @headers =
   { :offset(0), :len(100), :name<name>, :gen(sub (IO $f, Int $len = 100) {
-      my $r = "{$f.relative}{$f ~~ :d ?? '/' !! ''}".chars > $len
+      my $r = $f.relative.chars > $len
         ?? Buf.new((pax-pack('path', $f.relative)//('PaxHeader/'~$f.basename.substr(0,88))).encode('utf8').values)
-        !! Buf.new("{$f.relative}{$f ~~ :d ?? '/' !! ''}".encode('utf8').values);
+        !! Buf.new($f.basename.encode('utf8').values);
       $r.append(gen-empty($r.elems+1..$len));
       $r;
     })
   },
   { :offset(100), :len(8), :name<mode>, :gen(sub (IO $f, Int $len = 8) {
       my $mask = Buf.new(($f.mode.Str~' ').encode('utf8').values);
-      Buf.new(gen-empty($mask.elems+1..$len-1, '0'.ord), $mask.Slip, Buf.new(0).Slip);
+      Buf.new(gen-empty($mask.elems+1..$len-1, '0'.ord), |$mask, |Buf.new(0));
     })
   },
   { :offset(108), :len(8), :name<uid>, :gen(sub (IO $f, Int $len = 8) {
       my $mask = Buf.new((nqp::stat($f.absolute, 10).base(8)~' ').encode('utf8').values);
-      Buf.new(gen-empty($mask.elems+1..$len-1, '0'.ord), $mask.Slip, Buf.new(0).Slip);
+      Buf.new(gen-empty($mask.elems+1..$len-1, '0'.ord), |$mask, |Buf.new(0));
     }),
   },
   { :offset(116), :len(8), :name<gid>, :gen(sub (IO $f, Int $len = 8) {
       my $mask = Buf.new((nqp::stat($f.absolute, 11).base(8)~' ').encode('utf8').values);
-      Buf.new(gen-empty($mask.elems+1..$len-1, '0'.ord), $mask.Slip, Buf.new(0).Slip);
+      Buf.new(gen-empty($mask.elems+1..$len-1, '0'.ord), |$mask, |Buf.new(0));
     }),
   },
   { :offset(124), :len(12), :name<size>, :gen(sub (IO $f, Int $len = 12) {
       my $mask = Buf.new(($f.s.base(8).Str~' ').encode('utf8').values);
-      Buf.new(gen-empty($mask.elems+1..$len, '0'.ord), $mask.Slip);
+      Buf.new(gen-empty($mask.elems+1..$len, '0'.ord), |$mask);
     }),
   },
   { :offset(136), :len(12), :name<modified>, :gen(sub (IO $f, Int $len = 12) {
       my $mask = Buf.new(($f.modified.DateTime.posix.base(8).Str~' ').encode('utf8').values);
-      Buf.new(gen-empty($mask.elems+1..$len, '0'.ord), $mask.Slip);
+      Buf.new(gen-empty($mask.elems+1..$len, '0'.ord), |$mask);
     }),
   },
   { :offset(148), :len(8), :name<checksum>, :gen(sub (IO $f, Int $len = 8) {
@@ -56,12 +56,12 @@ my @headers =
       if %*EXT.keys {
         %*EXT<type-flag> = Buf.new(gen-empty(2..$len, '0'.ord), 'x'.encode('utf8').values);
       }
-      Buf.new(gen-empty($mask.elems+1..$len, '0'.ord), $mask.Slip);
+      Buf.new(gen-empty($mask.elems+1..$len, '0'.ord), |$mask);
     }),
   },
   { :offset(157), :len(100), :name<link-name>, :gen(sub (IO $f, Int $len = 100) {
       my $mask = Buf.new((nqp::stat($f.absolute, 12) ?? nqp::readlink($f.absolute) !! '').Str.encode('utf8').values);
-      Buf.new(gen-empty($mask.elems+1..$len, 0), $mask.Slip);
+      Buf.new(gen-empty($mask.elems+1..$len, 0), |$mask);
     }),
   },
   { :offset(257), :len(8), :name<ustar>, :gen(sub (IO $f, Int $len = 8) {
@@ -87,8 +87,8 @@ my @headers =
     }),
   },
   { :offset(345), :len(155), :name<prefix>, :gen(sub (IO $f, Int $len = 155) {
-      my $mask = Buf.new(($f.dirname ne '.' && %*EXT.keys.elems == 0 ?? $f.dirname !! '').Str.substr(0,154).encode('utf8').values);
-      Buf.new($mask.Slip, gen-empty($mask.elems..^$len));
+      my $mask = Buf.new(($f.dirname ne '.' && %*EXT.keys.elems == 0 ?? $f.dirname !! '').Str.encode('utf8').values);
+      Buf.new(|$mask, gen-empty($mask.elems..^$len));
     }),
   },
 ;
@@ -161,12 +161,15 @@ sub dump-buf(Buf $b) is export {
   print "\n";
 }
 
-sub read-existing-tar(IO $file) is export { #expects a tar file
+sub no (Buf $x) {
+  "\|{$x.decode('utf8').subst(/"\0"|"\n"|"\r"/, '.', :g).subst(/(. ** 16)/, { $0 ~ "|\n|" }, :g)}\|";
+}
+
+sub read-tar(IO $file) is export { #expects a tar file
   my $buffer = $file.slurp :bin;
   my $cursor = 0;
   my Buf $f;
-  my $x-p;
-  my ($fname, $fsize, $ftype) = (Nil, 0, '');
+  my ($fname, $fsize, $ftype);
   my $files = 0;
   my @fs;
   my %idx =
@@ -174,36 +177,30 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
     n => @headers.grep(*<name> eq 'name')[0],
     s => @headers.grep(*<name> eq 'size')[0],
   ;
-  while $cursor < ($buffer.elems - ($record-size * 2)) {
+  while $cursor < $buffer.elems {
     #get header - 
-    $f.=new unless $ftype eq 'x';
+    $f.=new;
     $f.push($buffer.subbuf($cursor, $record-size));
-    $fname   = $f.subbuf(%idx<n><offset>, %idx<n><len>).decode('utf8').subst(/"\0"/,'',:g)
-      unless $ftype eq 'x';
-    $ftype   = $f.subbuf($ftype eq 'x' ?? *-%idx<t><offset> !! %idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/,'',:g);
-    $fsize   = :8($f.subbuf(%idx<s><offset>, %idx<s><len>).decode('utf8').subst(/"\0"|' '/,'',:g))//0;
+    $ftype   = $f.subbuf(%idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/,'',:g);
+    $fname   = $f.subbuf(%idx<n><offset>, %idx<n><len>).decode('utf8').subst(/"\0"/,'',:g);
+    $fsize   = :8($f.subbuf(%idx<s><offset>, %idx<s><len>).decode('utf8').subst(/"\0"/,'',:g))//0;
     $cursor += $record-size;
     if $ftype eq ('x') {
-      $f.push($buffer.subbuf($cursor, $fsize));
-      $x-p     = $buffer.subbuf($cursor, $fsize).decode('utf8');
-      $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size));
-      next unless $x-p.match(/(\d+)' path'/);
-      $x-p    .=substr($/.from);
-      $fname   = $x-p.substr($/[0].Str.chars + 6, $/[0].Int - $/[0].Str.chars - 7).subst(/"\0"/, '', :g);
+      $f.push($buffer.subbuf($cursor, $record-size));
+      # parse this;
       next;
     }
     #read fdata
     $f.push($buffer.subbuf($cursor, $fsize))
       if $ftype eq ('0'|'1'|'g');
-    $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size))
+    $cursor += $fsize + $record-size - ($fsize % $record-size)
       if $ftype eq ('0'|'1'|'g');
     @fs.push({
       name    => $fname,
       written => 1,
       io      => Nil,
-      buffer  => $f.clone,
-    }) if $fname && $ftype ne 'g';
-    $fname = Nil;
+    });
+    say "$ftype:$fname ($fsize)\n========>\n{no $f.subbuf(*-$fsize)}\<===========\n\n";
+    #die 'ded' if $files++ == 2;
   }
-  @fs;
 }

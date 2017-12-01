@@ -1,0 +1,19 @@
+{
+  "name" : "Archive::Tar::PP",
+  "support" : {
+  },
+  "auth": "github:tony-o",
+  "perl" : "6.c",
+  "provides" : {
+    "Archive::Tar::PP": "lib/Archive/Tar/PP.pm6",
+    "Archive::Tar::PP::Util": "lib/Archive/Tar/PP/Util.pm6",
+    "Archive::Tar::PP::Tar": "lib/Archive/Tar/PP/Tar.pm6"
+  },
+  "depends": [ ],
+  "test-depends" : [
+    "Test"
+  ],
+  "description" : "a very basic tar utility for perl6, by perl6",
+  "source-url"  : "git://github.com/tony-o/perl6-archive-tar-pp.git",
+  "version" : "v0.0.1"
+}
