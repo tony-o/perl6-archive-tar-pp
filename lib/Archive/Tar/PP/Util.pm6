@@ -183,7 +183,6 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
     $fsize   = :8($f.subbuf(($ftype eq 'x' ?? *-$record-size+%idx<s><offset> !! %idx<s><offset>), %idx<s><len>).decode('utf8').subst(/"\0"|' '/,'',:g))//0;
     $ftype   = $f.subbuf(($ftype eq 'x' ?? *-$record-size+%idx<t><offset> !! %idx<t><offset>), %idx<t><len>).decode('utf8').subst(/"\0"/,'',:g);
     $cursor += $record-size;
-    say "$fsize $fname" if $fname ~~ / 'x.pl6' /;
     if $ftype eq ('x') {
       $f.push($buffer.subbuf($cursor, $fsize));
       $x-p     = $buffer.subbuf($cursor, $fsize).decode('utf8');
@@ -199,6 +198,7 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
     $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size))
       if $ftype eq ('0'|'1'|'g');
     $multi = $f.subbuf(%idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/, '', :g) eq 'x' ?? 2 !! 1; 
+    say $fsize if $fname ~~ /'T0N'/;
     @fs.push((
       name    => $fname,
       written => 1,
@@ -207,7 +207,7 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
       data    => $f.subbuf($record-size * $multi),
       type    => $ftype == 5 ?? 'd' !! 'f',
       fsize   => $fsize,
-    ).Hash) if $fname && $ftype ne 'g';
+    ).Hash) if $fname ne '' && $ftype ne 'g';
     $fname = Nil;
   }
   @fs;

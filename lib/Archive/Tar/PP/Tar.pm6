@@ -34,10 +34,9 @@ class Archive::Tar::PP::Tar {
     return Nil
       unless $f || $f.elems == 0;
     $f=$f[0];
-    #die $f<data>.subbuf(0, $f<fsize>).perl if $fn ~~ /'x.pl6'/;
+    say $f<fsize> if $fn ~~ /'T0N'/;
     my Buf $b.=new;
-    $f<data>.perl.say;
-    try { $b = $f<data>.subbuf(0, $f<fsize>); CATCH { default { .say } }};
+    try { $b = $f<data>.subbuf(0, $f<fsize>).clone; CATCH { default { .say } }};
     ($f<type>//'') => $b;
   }
 
@@ -55,7 +54,7 @@ class Archive::Tar::PP::Tar {
       $entry<fsize>  = :8(($header.elems == 1024
         ?? $header.subbuf(512+124, 12)
         !! $header.subbuf(124, 12)
-      ).decode('utf8').subst(/"\0"/, '', :g))//0;
+      ).decode('utf8').subst(/"\0"/, '', :g).trim)//0;
       $entry<header> = $header;
       $entry<data>   = $data;
     }
