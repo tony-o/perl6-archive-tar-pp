@@ -24,7 +24,6 @@ class Archive::Tar::PP::Tar {
         unless $x ~~ :e;
       @!buffer.push((
         name    => $x.relative,
-        buffer  => @[$.data-size($_) + $.header-size],
         written => 0,
         io      => $x,
       ).Hash);
