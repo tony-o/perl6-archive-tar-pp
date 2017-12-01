@@ -34,7 +34,6 @@ class Archive::Tar::PP::Tar {
     return Nil
       unless $f || $f.elems == 0;
     $f=$f[0];
-    say $f<fsize> if $fn ~~ /'T0N'/;
     my Buf $b.=new;
     try { $b = $f<data>.subbuf(0, $f<fsize>).clone; CATCH { default { .say } }};
     ($f<type>//'') => $b;
@@ -51,10 +50,11 @@ class Archive::Tar::PP::Tar {
       my $data   = form-data($entry<io>);
       $buffer.push: $header;
       $buffer.push: $data;
-      $entry<fsize>  = :8(($header.elems == 1024
-        ?? $header.subbuf(512+124, 12)
+      $entry<fsize>  = :8(($header.elems > $record-size
+        ?? $header.subbuf($header.elems - 512 + 124, 12)
         !! $header.subbuf(124, 12)
       ).decode('utf8').subst(/"\0"/, '', :g).trim)//0;
+
       $entry<header> = $header;
       $entry<data>   = $data;
     }

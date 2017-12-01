@@ -198,7 +198,6 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
     $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size))
       if $ftype eq ('0'|'1'|'g');
     $multi = $f.subbuf(%idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/, '', :g) eq 'x' ?? 2 !! 1; 
-    say $fsize if $fname ~~ /'T0N'/;
     @fs.push((
       name    => $fname,
       written => 1,
