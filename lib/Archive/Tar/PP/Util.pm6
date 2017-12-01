@@ -161,15 +161,12 @@ sub dump-buf(Buf $b) is export {
   print "\n";
 }
 
-sub no (Buf $x) {
-  "\|{$x.decode('utf8').subst(/"\0"|"\n"|"\r"/, '.', :g).subst(/(. ** 16)/, { $0 ~ "|\n|" }, :g)}\|";
-}
-
 sub read-tar(IO $file) is export { #expects a tar file
   my $buffer = $file.slurp :bin;
   my $cursor = 0;
   my Buf $f;
-  my ($fname, $fsize, $ftype);
+  my $x-p;
+  my ($fname, $fsize, $ftype) = (Nil, 0, '');
   my $files = 0;
   my @fs;
   my %idx =
@@ -177,30 +174,36 @@ sub read-tar(IO $file) is export { #expects a tar file
     n => @headers.grep(*<name> eq 'name')[0],
     s => @headers.grep(*<name> eq 'size')[0],
   ;
-  while $cursor < $buffer.elems {
+  while $cursor < ($buffer.elems - ($record-size * 2)) {
     #get header - 
-    $f.=new;
+    $f.=new unless $ftype eq 'x';
     $f.push($buffer.subbuf($cursor, $record-size));
-    $ftype   = $f.subbuf(%idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/,'',:g);
-    $fname   = $f.subbuf(%idx<n><offset>, %idx<n><len>).decode('utf8').subst(/"\0"/,'',:g);
+    $fname   = $f.subbuf(%idx<n><offset>, %idx<n><len>).decode('utf8').subst(/"\0"/,'',:g)
+      unless $ftype eq 'x';
+    $ftype   = $f.subbuf($ftype eq 'x' ?? *-%idx<t><offset> !! %idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/,'',:g);
     $fsize   = :8($f.subbuf(%idx<s><offset>, %idx<s><len>).decode('utf8').subst(/"\0"/,'',:g))//0;
     $cursor += $record-size;
     if $ftype eq ('x') {
-      $f.push($buffer.subbuf($cursor, $record-size));
-      # parse this;
+      $f.push($buffer.subbuf($cursor, $fsize));
+      $x-p     = $buffer.subbuf($cursor, $fsize).decode('utf8');
+      $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size));
+      next unless $x-p.match(/(\d+)' path'/);
+      $x-p    .=substr($/.from);
+      $fname   = $x-p.substr($/[0].Str.chars + 6, $/[0].Int - $/[0].Str.chars - 7).subst(/"\0"/, '', :g);
       next;
     }
     #read fdata
     $f.push($buffer.subbuf($cursor, $fsize))
       if $ftype eq ('0'|'1'|'g');
-    $cursor += $fsize + $record-size - ($fsize % $record-size)
+    $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size))
       if $ftype eq ('0'|'1'|'g');
     @fs.push({
       name    => $fname,
       written => 1,
       io      => Nil,
-    });
-    say "$ftype:$fname ($fsize)\n========>\n{no $f.subbuf(*-$fsize)}\<===========\n\n";
-    #die 'ded' if $files++ == 2;
+      buffer  => $f.clone,
+    }) if $fname;
+    $fname = Nil;
   }
+  @fs;
 }
