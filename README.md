@@ -20,6 +20,8 @@ use Archive::Tar::PP;
 my $crusty = read-tar('x.tar');
 
 $crusty.ls; #returns files
+$crusty.peek('file-name to get contents of');
+#  returns Nil for dir, empty Buf for an empty file, and a Buf with the contents otherwise
 ```
 
 # limitations

@@ -20,6 +20,7 @@ class Archive::Tar::PP::Tar {
         name    => $x.relative,
         written => 0,
         io      => $x,
+        type    => $x ~~ :d ?? 'd' !! 'f',
       ).Hash);
     });
   }
@@ -28,14 +29,35 @@ class Archive::Tar::PP::Tar {
     @!buffer.map({ $_<name> });
   }
 
+  method peek(Str $fn) {
+    my $f = @!buffer.grep(*<name> eq $fn);
+    return Nil
+      unless $f || $f.elems == 0;
+    $f=$f[0];
+    #die $f<data>.subbuf(0, $f<fsize>).perl if $fn ~~ /'x.pl6'/;
+    my Buf $b.=new;
+    $f<data>.perl.say;
+    try { $b = $f<data>.subbuf(0, $f<fsize>); CATCH { default { .say } }};
+    ($f<type>//'') => $b;
+  }
+
   method write($fn?, Bool :$force = False) {
     my $f = !$fn.defined ?? $!file-name !! $fn ~~ IO ?? $fn !! $fn.IO;
     die "File exists {$f.relative}, please use :force to overwrite"
       if (!$force && $f ~~ :e && $f ne $!file-name.relative);
     my Buf $buffer .=new;
-    for @!buffer.grep(!*.<written>) -> $entry {
-      $buffer.push: form-header($entry<io>);
-      $buffer.push: form-data($entry<io>);
+    my $cursor = 0;
+    for @!buffer -> $entry is rw {
+      my $header = form-header($entry<io>);
+      my $data   = form-data($entry<io>);
+      $buffer.push: $header;
+      $buffer.push: $data;
+      $entry<fsize>  = :8(($header.elems == 1024
+        ?? $header.subbuf(512+124, 12)
+        !! $header.subbuf(124, 12)
+      ).decode('utf8').subst(/"\0"/, '', :g))//0;
+      $entry<header> = $header;
+      $entry<data>   = $data;
     }
     for 0 ..^2 {
       $buffer.push(form-header);

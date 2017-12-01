@@ -1,7 +1,7 @@
 use Test;
 use Archive::Tar::PP;
 
-plan 33;
+plan 10;
 
 sub full-dir(IO $path) {
   ($path.dir.map({ $_ ~~ :d ?? full-dir($_).Slip !! $_.relative }).Slip, $path.relative~'/').Slip;
@@ -12,9 +12,11 @@ my @elems;
 
 my $reader = read-tar('./t/tar/git.tar');
 @elems = $reader.ls;
-ok @elems.elems == @ftar.elems, 'git.tar has same number of files as our extracted using `tar`';
+my $peek;
 for @elems -> $e {
-  ok @ftar.grep(* ~~ / $e $$ /), "matched: {$e.chars > 40 ?? "... {$e.substr(*-40,40)}" !! $e}";
+  $peek = $reader.peek($e);
+#  is-deeply $peek.value, Buf.new(@ftar.grep(* ~~ / $e $$/)[0].IO.slurp(:bin)), "{$e.IO.basename.chars > 40 ?? $e.IO.basename.substr(0,37)~'..' !! $e.IO.basename} contents same same"
+#    if $peek.key ne 'd';
 }
 
 my $tmp-file = "{$*TMPDIR.absolute}/{('a'..'z').pick(20).join('')}".IO;
@@ -23,11 +25,11 @@ my $writer = new-tar($tmp-file);
 $writer.push(@ftar);
 $writer.write;
 
-ok True, 'writer completed succesfully';
 @elems = read-tar($tmp-file).ls;
-ok read-tar($tmp-file).ls.elems == @ftar, 'file count matches between git tar and our created tmp tar';
 for @elems -> $e {
-  ok @ftar.grep(* ~~ / $e $$ /), "matched: {$e.chars > 40 ?? "... {$e.substr(*-40,40)}" !! $e}";
+  $peek = $writer.peek($e);
+  is-deeply $peek.value, Buf.new(@ftar.grep(* ~~ / $e $$/)[0].IO.slurp(:bin)), "{$e.IO.basename.chars > 40 ?? $e.IO.basename.substr(0,37)~'..' !! $e.IO.basename} contents same same"
+    if $peek.key ne 'd';
 }
 
 try $tmp-file.unlink;

@@ -165,7 +165,7 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
   my $buffer = $file.slurp :bin;
   my $cursor = 0;
   my Buf $f;
-  my $x-p;
+  my ($multi, $x-p);
   my ($fname, $fsize, $ftype) = (Nil, 0, '');
   my $files = 0;
   my @fs;
@@ -180,9 +180,10 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
     $f.push($buffer.subbuf($cursor, $record-size));
     $fname   = $f.subbuf(%idx<n><offset>, %idx<n><len>).decode('utf8').subst(/"\0"/,'',:g)
       unless $ftype eq 'x';
-    $ftype   = $f.subbuf($ftype eq 'x' ?? *-%idx<t><offset> !! %idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/,'',:g);
-    $fsize   = :8($f.subbuf(%idx<s><offset>, %idx<s><len>).decode('utf8').subst(/"\0"|' '/,'',:g))//0;
+    $fsize   = :8($f.subbuf(($ftype eq 'x' ?? *-$record-size+%idx<s><offset> !! %idx<s><offset>), %idx<s><len>).decode('utf8').subst(/"\0"|' '/,'',:g))//0;
+    $ftype   = $f.subbuf(($ftype eq 'x' ?? *-$record-size+%idx<t><offset> !! %idx<t><offset>), %idx<t><len>).decode('utf8').subst(/"\0"/,'',:g);
     $cursor += $record-size;
+    say "$fsize $fname" if $fname ~~ / 'x.pl6' /;
     if $ftype eq ('x') {
       $f.push($buffer.subbuf($cursor, $fsize));
       $x-p     = $buffer.subbuf($cursor, $fsize).decode('utf8');
@@ -197,12 +198,16 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
       if $ftype eq ('0'|'1'|'g');
     $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size))
       if $ftype eq ('0'|'1'|'g');
-    @fs.push({
+    $multi = $f.subbuf(%idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/, '', :g) eq 'x' ?? 2 !! 1; 
+    @fs.push((
       name    => $fname,
       written => 1,
       io      => Nil,
-      buffer  => $f.clone,
-    }) if $fname && $ftype ne 'g';
+      header  => $f.subbuf(0, $record-size * $multi).clone,
+      data    => $f.subbuf($record-size * $multi),
+      type    => $ftype == 5 ?? 'd' !! 'f',
+      fsize   => $fsize,
+    ).Hash) if $fname && $ftype ne 'g';
     $fname = Nil;
   }
   @fs;
