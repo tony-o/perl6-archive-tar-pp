@@ -24,9 +24,7 @@ my @headers =
   { :offset(345), :len(155), :name<prefix>,    :default(Buf.allocate(155)),  },
 ;
 
-sub form-header(IO $file?) is export {
-  return Buf.allocate($record-size)
-    unless $file.defined;
+sub form-header(IO() $file) is export {
   my (@x, $r);
   my @values =
     ($file.relative ~ ($file ~~ :d ?? '/' !! '')).Str.encode('utf8'), #name
@@ -98,11 +96,6 @@ sub form-header(IO $file?) is export {
   $r;
 }
 
-sub form-data(IO $file) is export {
-  my $empty = $record-size - ($file.s % $record-size);
-  $file ~~ :d ?? Buf.new() !! Buf.new(|$file.IO.slurp.encode('utf8'), Buf.allocate($empty).values);
-}
-
 sub dump-buf(Buf $b) is export {
   my $i = 0;
   my $append;
@@ -119,7 +112,7 @@ sub dump-buf(Buf $b) is export {
   print "\n";
 }
 
-sub read-existing-tar(IO $file) is export { #expects a tar file
+sub read-existing-tar(IO() $file) is export { #expects a tar file
   my $buffer = $file.slurp :bin;
   my $cursor = 0;
   my Buf $f;

@@ -2,25 +2,22 @@ use Archive::Tar::PP::Util;
 
 class Archive::Tar::PP::Tar {
   has @!buffer;
-  has IO $!file-name;
+  has IO::Path $!file-name;
   has $!state;
 
-  submethod BUILD (IO :$!file-name, :@!buffer) {
-    die 'Provide a file name for tar.'
-      unless $!file-name;
+  submethod TWEAK(IO() :$!file-name!, :@!buffer) {
     $!state = @!buffer.elems ?? 'tar' !! 'extracted';
   }
 
   method push(*@files){
-    @files.grep(* ~~ any(IO|Str) ).map({
-      my $x = $_ ~~ IO ?? $_ !! $_.IO;
-      warn 'Could not find file to tar: '~$x.relative, next
-        unless $x ~~ :e;
+    @files.map(*.IO).map({
+      warn "Could not find file to tar: {.relative}", next
+        unless $_.e;
       @!buffer.push((
-        name    => $x.relative,
+        name    => $_.relative,
         written => 0,
-        io      => $x,
-        type    => $x ~~ :d ?? 'd' !! 'f',
+        io      => $_,
+        type    => $_ ~~ :d ?? 'd' !! 'f',
       ).Hash);
     });
   }
@@ -39,15 +36,17 @@ class Archive::Tar::PP::Tar {
     ($f<type>//'') => $b;
   }
 
-  method write($fn?, Bool :$force = False) {
-    my $f = !$fn.defined ?? $!file-name !! $fn ~~ IO ?? $fn !! $fn.IO;
-    die "File exists {$f.relative}, please use :force to overwrite"
-      if (!$force && $f ~~ :e && $f ne $!file-name.relative);
+  method write(IO() $file-name = $!file-name, Bool :$force = False) {
+    die "File exists {$file-name.relative}, please use :force to overwrite"
+      if (!$force && $file-name ~~ :e && $file-name ne $!file-name.relative);
     my Buf $buffer .=new;
     my $cursor = 0;
     for @!buffer -> $entry is rw {
       my $header = form-header($entry<io>);
-      my $data   = form-data($entry<io>);
+      my $data   = -> IO() $file {
+        my $empty = $record-size - ($file.s % $record-size);
+        $file ~~ :d ?? Buf.new() !! Buf.new(|$file.IO.slurp.encode('utf8'), Buf.allocate($empty).values);
+      }($entry<io>);
       $buffer.push: $header;
       $buffer.push: $data;
       $entry<fsize>  = :8(($header.elems > $record-size
@@ -59,7 +58,7 @@ class Archive::Tar::PP::Tar {
       $entry<data>   = $data;
     }
     for 0 ..^2 {
-      $buffer.push(form-header);
+      $buffer.push(Buf.allocate($record-size));
     }
     $!file-name.spurt($buffer, :b);
     $!state = 'tar';
