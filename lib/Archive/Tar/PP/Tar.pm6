@@ -1,5 +1,5 @@
 use Archive::Tar::PP::Util;
- 
+
 class Archive::Tar::PP::Tar {
   has @!buffer;
   has IO $!file-name;

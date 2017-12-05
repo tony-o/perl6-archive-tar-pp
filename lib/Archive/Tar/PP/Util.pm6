@@ -71,9 +71,9 @@ sub form-header(IO $file?) is export {
     $val .=new(Buf.allocate(@headers[$_]<len> - $val.elems, @headers[$_]<lx-pad>).Slip, $val.values.Slip) if Any !~~ $val && @headers[$_]<lx-pad>.defined;
     $val .=new($val.values.Slip, Buf.allocate(@headers[$_]<len> - $val.elems, @headers[$_]<rx-pad>).Slip) if Any !~~ $val && @headers[$_]<rx-pad>.defined;
 
-    @x[0].push(Buf.new('x'.encode('utf8').values)) 
+    @x[0].push(Buf.new('x'.encode('utf8').values))
       if @headers[$_]<name> eq 'type-flag' && @x.elems == 3;
-    @x[0].push: Buf.new(Buf.allocate(11 - @x[1].elems.base(8).Str.chars, '0'.ord).values, (@x[1].elems.base(8) ~ ' ').encode('utf8').values) 
+    @x[0].push: Buf.new(Buf.allocate(11 - @x[1].elems.base(8).Str.chars, '0'.ord).values, (@x[1].elems.base(8) ~ ' ').encode('utf8').values)
       if @x.elems == 3 && @headers[$_]<name> eq 'size';
 
     @x[0].push: Any ~~ $val ?? @headers[$_]<default> !! $val
@@ -138,7 +138,7 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
     s => @headers.grep(*<name> eq 'size')[0],
   ;
   while $cursor < ($buffer.elems - ($record-size * 2)) {
-    #get header - 
+    #get header -
     $f.=new unless $ftype eq 'x';
     $f.push($buffer.subbuf($cursor, $record-size));
     $fname   = $f.subbuf(%idx<n><offset>, %idx<n><len>).decode('utf8').subst(/"\0"/,'',:g)
@@ -160,7 +160,7 @@ sub read-existing-tar(IO $file) is export { #expects a tar file
       if $ftype eq ('0'|'1'|'g');
     $cursor += $fsize + ($fsize % $record-size == 0 ?? 0 !! $record-size - ($fsize % $record-size))
       if $ftype eq ('0'|'1'|'g');
-    $multi = $f.subbuf(%idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/, '', :g) eq 'x' ?? 2 !! 1; 
+    $multi = $f.subbuf(%idx<t><offset>, %idx<t><len>).decode('utf8').subst(/"\0"/, '', :g) eq 'x' ?? 2 !! 1;
     @fs.push((
       name    => $fname,
       written => 1,
