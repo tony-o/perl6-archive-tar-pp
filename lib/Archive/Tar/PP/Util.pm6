@@ -3,11 +3,6 @@ use nqp;
 
 our $record-size is export = 512;
 
-sub gen-empty(Range $range, $val = 0x00) {
-  #return Buf.new if $range.min >= $range.max;
-  |$range.map({ $val });
-}
-
 sub pax-pack($name, $value) {
   sprintf("%d %s=%s\n", "$name=$value\n".chars+4, $name, $value).encode('utf8').values;
 }
@@ -104,8 +99,8 @@ sub form-header(IO $file?) is export {
 }
 
 sub form-data(IO $file) is export {
-  my $empty = 1..$record-size - ($file.s % $record-size);
-  $file ~~ :d ?? Buf.new() !! Buf.new(|$file.IO.slurp.encode('utf8'), gen-empty($empty));
+  my $empty = $record-size - ($file.s % $record-size);
+  $file ~~ :d ?? Buf.new() !! Buf.new(|$file.IO.slurp.encode('utf8'), Buf.allocate($empty).values);
 }
 
 sub dump-buf(Buf $b) is export {
