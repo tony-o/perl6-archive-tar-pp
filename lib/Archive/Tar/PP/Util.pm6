@@ -4,29 +4,27 @@ use nqp;
 our $record-size is export = 512;
 
 sub pax-pack($name, $value) {
-  sprintf("%d %s=%s\n", "$name=$value\n".chars+4, $name, $value).encode('utf8').values;
+  sprintf("%d %s=%s\n", "$name=$value\n".chars+4, $name, $value).ords;
 }
 my @headers =
   { :offset(0),   :len(100), :name<name>,      :rx-pad(0), :pax<path>, },
-  { :offset(100), :len(8),   :name<mode>,      :lx-pad('0'.ord),  },
-  { :offset(108), :len(8),   :name<uid>,       :lx-pad('0'.ord),  },
-  { :offset(116), :len(8),   :name<gid>,       :lx-pad('0'.ord),  },
-  { :offset(124), :len(12),  :name<size>,      :lx-pad('0'.ord),  },
-  { :offset(136), :len(12),  :name<modified>,  :lx-pad('0'.ord),  },
+  { :offset(100), :len(8),   :name<mode>,      :lx-pad(0),  },
+  { :offset(108), :len(8),   :name<uid>,       :lx-pad(0),  },
+  { :offset(116), :len(8),   :name<gid>,       :lx-pad(0),  },
+  { :offset(124), :len(12),  :name<size>,      :lx-pad(0),  },
+  { :offset(136), :len(12),  :name<modified>,  :lx-pad(0),  },
   { :offset(148), :len(8),   :name<checksum>,  :default(Buf.allocate(8)), },
   { :offset(156), :len(1),   :name<type-flag>, },
   { :offset(157), :len(100), :name<link-name>, :lx-pad(0), :default(Buf.allocate(100, 0)), },
-  { :offset(257), :len(8),   :name<ustar>,     :default(Buf.new("ustar{"\0"}00".encode('utf8').values)), },
-  { :offset(265), :len(32),  :name<uname>,     :default(Buf.new('unknown'.encode('utf8').values, Buf.allocate(25, 0).values)), },
-  { :offset(297), :len(32),  :name<gname>,     :default(Buf.new('unknown'.encode('utf8').values, Buf.allocate(25, 0).values)), },
-  { :offset(329), :len(8),   :name<major>,     :default(Buf.new("000000 \0".encode('utf8').values)), },
-  { :offset(337), :len(8),   :name<minor>,     :default(Buf.new("000000 \0".encode('utf8').values)),},
+  { :offset(257), :len(8),   :name<ustar>,     :default(Buf.new("ustar{"\0"}00".ords)), },
+  { :offset(265), :len(32),  :name<uname>,     :default(Buf.new('unknown'.ords, BEGIN 0 xx 25)), },
+  { :offset(297), :len(32),  :name<gname>,     :default(Buf.new('unknown'.ords, BEGIN 0 xx 25)), },
+  { :offset(329), :len(8),   :name<major>,     :default(Buf.new("000000 \0".ords)), },
+  { :offset(337), :len(8),   :name<minor>,     :default(Buf.new("000000 \0".ords)),},
   { :offset(345), :len(155), :name<prefix>,    :default(Buf.allocate(155)),  },
 ;
 
-sub form-header(IO $file?) is export {
-  return Buf.allocate($record-size)
-    unless $file.defined;
+sub form-header(IO() $file) is export {
   my (@x, $r);
   my @values =
     ($file.relative ~ ($file ~~ :d ?? '/' !! '')).Str.encode('utf8'), #name
@@ -66,9 +64,9 @@ sub form-header(IO $file?) is export {
     $val .=new(Buf.allocate(@headers[$_]<len> - $val.elems, @headers[$_]<lx-pad>).Slip, $val.values.Slip) if Any !~~ $val && @headers[$_]<lx-pad>.defined;
     $val .=new($val.values.Slip, Buf.allocate(@headers[$_]<len> - $val.elems, @headers[$_]<rx-pad>).Slip) if Any !~~ $val && @headers[$_]<rx-pad>.defined;
 
-    @x[0].push(Buf.new('x'.encode('utf8').values))
+    @x[0].push(Buf.new('x'.ord))
       if @headers[$_]<name> eq 'type-flag' && @x.elems == 3;
-    @x[0].push: Buf.new(Buf.allocate(11 - @x[1].elems.base(8).Str.chars, '0'.ord).values, (@x[1].elems.base(8) ~ ' ').encode('utf8').values)
+    @x[0].push: Buf.new(Buf.allocate(11 - @x[1].elems.base(8).Str.chars, '0'.ord).values, (@x[1].elems.base(8) ~ ' ').ords)
       if @x.elems == 3 && @headers[$_]<name> eq 'size';
 
     @x[0].push: Any ~~ $val ?? @headers[$_]<default> !! $val
@@ -85,7 +83,7 @@ sub form-header(IO $file?) is export {
       $cs = ($cs + @x[$xidx][$idx]) % 262144;
     }
     $cs = $cs.base(8).Str ~ "\0 ";
-    @x[$xidx].subbuf-rw(148, 8) = Buf.new(Buf.allocate(8 - $cs.chars, '0'.ord).values, $cs.encode('utf8').values.Slip);
+    @x[$xidx].subbuf-rw(148, 8) = Buf.new(Buf.allocate(8 - $cs.chars, '0'.ord).values, $cs.ords.Slip);
   }
   #fill out to 512 size blocks
   $r = Buf.new;
@@ -96,11 +94,6 @@ sub form-header(IO $file?) is export {
     $r.push(@x[$_]);
   }
   $r;
-}
-
-sub form-data(IO $file) is export {
-  my $empty = $record-size - ($file.s % $record-size);
-  $file ~~ :d ?? Buf.new() !! Buf.new(|$file.IO.slurp.encode('utf8'), Buf.allocate($empty).values);
 }
 
 sub dump-buf(Buf $b) is export {
@@ -119,7 +112,7 @@ sub dump-buf(Buf $b) is export {
   print "\n";
 }
 
-sub read-existing-tar(IO $file) is export { #expects a tar file
+sub read-existing-tar(IO() $file) is export { #expects a tar file
   my $buffer = $file.slurp :bin;
   my $cursor = 0;
   my Buf $f;
