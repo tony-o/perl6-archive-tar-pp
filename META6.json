@@ -2,7 +2,7 @@
   "name" : "Archive::Tar::PP",
   "support" : {
   },
-  "auth": "github:tony-o",
+  "auth": "zef:tony-o",
   "perl" : "6.c",
   "provides" : {
     "Archive::Tar::PP": "lib/Archive/Tar/PP.pm6",
